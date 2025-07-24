@@ -35,7 +35,9 @@ enable_language(C ASM)
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME}
         Core/Src/hal_oled.c
-        Core/Inc/hal_oled.h)
+        Core/Inc/hal_oled.h
+        Core/Src/key.c
+        Core/Inc/key.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
