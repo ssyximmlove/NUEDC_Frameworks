@@ -96,3 +96,13 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         Libs/u8g2
 )
+
+# 张大头步进
+
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+        Libs/emm/Emm_V5.c
+)
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+        Libs/emm
+)

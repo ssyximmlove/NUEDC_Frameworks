@@ -58,6 +58,10 @@ typedef struct {
 } KeyInfo_t;
 
 // 函数声明
+
+void HAL_Key_Init_Timer(void);
+void HAL_Key_Timer_IRQHandler(void);
+
 KeyState_t HAL_Key_Scan(KeyMode_t mode);
 bool HAL_Key_IsPressed(uint8_t key_num);
 void HAL_Key_WaitForRelease(void);

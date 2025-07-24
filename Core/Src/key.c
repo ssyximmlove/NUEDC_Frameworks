@@ -6,6 +6,8 @@
 
 #include <stdio.h>
 
+#include "tim.h"
+
 // 按键信息数组
 static KeyInfo_t keys[5] = {
     {GPIOE, GPIO_PIN_2, KEY_STATE_IDLE, 0, false, false},  // KEY1
@@ -15,7 +17,14 @@ static KeyInfo_t keys[5] = {
     {GPIOE, GPIO_PIN_6, KEY_STATE_IDLE, 0, false, false}   // KEY5
 };
 
-static uint32_t last_scan_time = 0;
+/**
+ * @brief 初始化按键定时器
+ */
+void HAL_Key_Init_Timer(void) {
+    HAL_TIM_Base_Start_IT(&htim6);
+    printf("50Hz按键中断扫描启动\n");
+}
+
 
 /**
  * @brief 单个按键状态机处理
@@ -67,25 +76,6 @@ static void key_state_machine(KeyInfo_t* key_info)
 }
 
 /**
- * @brief 按键处理函数（需要定时调用）
- */
-void HAL_Key_Process(void)
-{
-    uint32_t current_time = HAL_GetTick();
-
-    // 控制扫描频率，避免过于频繁
-    if ((current_time - last_scan_time) < 5) {
-        return;
-    }
-    last_scan_time = current_time;
-
-    // 处理所有按键的状态机
-    for (int i = 0; i < 5; i++) {
-        key_state_machine(&keys[i]);
-    }
-}
-
-/**
  * @brief 按键扫描函数
  * @param mode 扫描模式：单次或连续
  * @return 按键状态
@@ -93,7 +83,7 @@ void HAL_Key_Process(void)
 KeyState_t HAL_Key_Scan(KeyMode_t mode)
 {
     // 处理状态机
-    HAL_Key_Process();
+    // HAL_Key_Process();
 
     for (int i = 0; i < 5; i++) {
         if (mode == KEY_MODE_SINGLE) {
@@ -124,7 +114,6 @@ bool HAL_Key_IsPressed(uint8_t key_num)
         return false;
     }
 
-    HAL_Key_Process();
     return keys[key_num - 1].is_pressed;
 }
 
@@ -134,10 +123,29 @@ bool HAL_Key_IsPressed(uint8_t key_num)
 void HAL_Key_WaitForRelease(void)
 {
     do {
-        HAL_Key_Process();
         HAL_Delay(10);
     } while (keys[0].is_pressed || keys[1].is_pressed || keys[2].is_pressed ||
              keys[3].is_pressed || keys[4].is_pressed);
+}
+
+/**
+ * @brief 定时器中断回调函数
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM6) {
+        HAL_Key_Timer_IRQHandler();
+    }
+}
+/**
+ * @brief 按键定时器中断处理函数
+ */
+void HAL_Key_Timer_IRQHandler(void)
+{
+    // 直接处理按键状态机，无需频率控制
+    for (int i = 0; i < 5; i++) {
+        key_state_machine(&keys[i]);
+    }
 }
 
 // TODO: 五向按键测试
