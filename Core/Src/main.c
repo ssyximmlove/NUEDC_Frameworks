@@ -31,6 +31,8 @@
 
 #include "SEGGER_RTT.h"
 #include "hal_oled.h"
+#include "key.h"
+#include "Emm_V5.h"
 
 /* USER CODE END Includes */
 
@@ -111,27 +113,19 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_Delay(100);
   SEGGER_RTT_Init();
-
-  printf("I2C scanning started...\n");
-  for (uint8_t addr = 1; addr < 128; addr++)
-  {
-    if (HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 3, 100) == HAL_OK)
-    {
-      printf("Device found at address: 0x%02X (7-bit), 0x%02X (8-bit)\n", addr, addr << 1);
-    }
-  }
-  printf("I2C scanning completed\n");
-
+  HAL_Delay(100);
 
   // Initialize OLED
-  if (HAL_OLED_Init() == HAL_OK)
-  {
-    printf("OLED initialized successfully\n");
+  if (HAL_OLED_Init() != HAL_OK) {
+    printf("OLED initialization failed!\n");
+    // 处理错误情况
+  } else {
+    printf("OLED ready for use\n");
+    // 可以安全使用OLED功能
   }
-  else
-  {
-    printf("OLED initialization failed\n");
-  }
+
+  HAL_OLED_Test();
+  Emm_V5_Test();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -141,7 +135,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    HAL_OLED_Test();
+
   }
   /* USER CODE END 3 */
 }

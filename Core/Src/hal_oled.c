@@ -5,6 +5,9 @@
 
 #include "hal_oled.h"
 
+#include <stdbool.h>
+#include <stdio.h>
+
 // 配置
 extern I2C_HandleTypeDef hi2c1;
 #define U8G2_I2C_HANDLE (&hi2c1)
@@ -95,12 +98,40 @@ uint8_t u8x8_gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *ar
 
 HAL_StatusTypeDef HAL_OLED_Init(void)
 {
+    printf("I2C scanning started...\n");
+    bool device_found = false;
+
+    for (uint8_t addr = 1; addr < 128; addr++)
+    {
+        if (HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 3, 100) == HAL_OK)
+        {
+            printf("Device found at address: 0x%02X (7-bit), 0x%02X (8-bit)\n", addr, addr << 1);
+
+            // 检查是否是OLED设备地址
+            if (addr == OLED_I2C_ADDRESS) {
+                device_found = true;
+            }
+        }
+    }
+
+    printf("I2C scanning completed\n");
+
+    // 如果未找到OLED设备，直接返回错误
+    if (!device_found) {
+        printf("OLED device not found at address 0x%02X\n", OLED_I2C_ADDRESS);
+        return HAL_ERROR;
+    }
+
+    printf("OLED device found, initializing u8g2...\n");
+
     // 初始化u8g2，选择合适的显示驱动
     u8g2_Setup_ssd1306_i2c_128x64_noname_f(&u8g2, U8G2_R0, u8x8_byte_stm32_hw_i2c, u8x8_gpio_and_delay);
     u8g2_InitDisplay(&u8g2);
     u8g2_SetPowerSave(&u8g2, 0); // 唤醒显示屏
     u8g2_ClearBuffer(&u8g2);
     u8g2_SendBuffer(&u8g2);
+
+    printf("OLED initialization completed successfully\n");
     return HAL_OK;
 }
 

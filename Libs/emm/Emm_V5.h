@@ -52,5 +52,6 @@ void Emm_V5_Origin_Set_O(uint8_t addr, bool svF); // 设置挡圈回零的零点
 void Emm_V5_Origin_Modify_Params(uint8_t addr, bool svF, uint8_t o_mode, uint8_t o_dir, uint16_t o_vel, uint32_t o_tm, uint16_t sl_vel, uint16_t sl_ma, uint16_t sl_ms, bool potF); // 修改回零参数
 void Emm_V5_Origin_Trigger_Return(uint8_t addr, uint8_t o_mode, bool snF); // 发送命令触发回零
 void Emm_V5_Origin_Interrupt(uint8_t addr); // 强制中断并退出回零
+void Emm_V5_Test();
 
 #endif

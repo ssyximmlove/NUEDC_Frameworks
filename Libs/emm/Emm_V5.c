@@ -12,7 +12,7 @@
 void usart_SendCmd(uint8_t *cmd, uint8_t len)
 {
   // 打印发送的数据
-  printf("USART3->电机 发送[%d字节]: ", len);
+  printf("USART3->Stepper Sending[%d Bytes]: ", len);
   for(int i = 0; i < len; i++) {
     printf("0x%02X ", cmd[i]);
   }
@@ -355,4 +355,103 @@ void Emm_V5_Origin_Interrupt(uint8_t addr)
   
   // 发送命令
   usart_SendCmd(cmd, 4);
+}
+
+
+void Emm_V5_Test(void)
+{
+    printf("=== Stepper Motor Test Started ===\n");
+
+    // Test 1: 基本转动测试
+    printf("Test 1: Basic rotation test\n");
+    printf("Moving forward 200 steps...\n");
+    Emm_V5_Pos_Control(1, 0, 500, 50, 200, false, false);  // 修正参数：地址,方向,速度,加速度,脉冲数,相对运动,不同步
+    HAL_Delay(2000);
+
+    printf("Moving backward 200 steps...\n");
+    Emm_V5_Pos_Control(1, 1, 500, 50, 200, false, false);  // 反转200步
+    HAL_Delay(2000);
+
+    // Test 2: 速度测试
+    printf("Test 2: Speed variation test\n");
+    printf("Slow speed (100 RPM)...\n");
+    Emm_V5_Vel_Control(1, 0, 100, 30, false);  // 修正参数：地址,方向,速度,加速度,不同步
+    HAL_Delay(3000);
+    Emm_V5_Stop_Now(1, false);
+
+    printf("Medium speed (300 RPM)...\n");
+    Emm_V5_Vel_Control(1, 0, 300, 30, false);
+    HAL_Delay(3000);
+    Emm_V5_Stop_Now(1, false);
+
+    printf("High speed (500 RPM)...\n");
+    Emm_V5_Vel_Control(1, 0, 500, 30, false);
+    HAL_Delay(3000);
+    Emm_V5_Stop_Now(1, false);
+
+    // Test 3: 多圈转动测试
+    printf("Test 3: Multi-revolution test\n");
+    printf("Moving 3 full revolutions clockwise...\n");
+    Emm_V5_Pos_Control(1, 0, 400, 50, 600, false, false);  // 正转600步
+    HAL_Delay(5000);
+
+    printf("Moving 3 full revolutions counter-clockwise...\n");
+    Emm_V5_Pos_Control(1, 1, 400, 50, 600, false, false);  // 反转600步
+    HAL_Delay(5000);
+
+    // Test 4: 加减速测试
+    printf("Test 4: Acceleration/Deceleration test\n");
+    printf("Gradual acceleration test...\n");
+    for(int speed = 100; speed <= 500; speed += 100) {
+        printf("Speed: %d RPM\n", speed);
+        Emm_V5_Vel_Control(1, 0, speed, 30, false);
+        HAL_Delay(2000);
+    }
+
+    printf("Gradual deceleration test...\n");
+    for(int speed = 500; speed >= 100; speed -= 100) {
+        printf("Speed: %d RPM\n", speed);
+        Emm_V5_Vel_Control(1, 0, speed, 30, false);
+        HAL_Delay(2000);
+    }
+
+    Emm_V5_Stop_Now(1, false);  // 停止
+
+    // Test 5: 精确定位测试
+    printf("Test 5: Precise positioning test\n");
+    printf("Setting origin...\n");
+    Emm_V5_Reset_CurPos_To_Zero(1);  // 使用现有函数代替不存在的Emm_V5_Set_Origin
+    HAL_Delay(1000);
+
+    int positions[] = {100, 300, 500, 200, 0};
+    int num_positions = sizeof(positions) / sizeof(positions[0]);
+
+    for(int i = 0; i < num_positions; i++) {
+        printf("Moving to position: %d steps\n", positions[i]);
+        // 计算相对移动距离和方向
+        static int current_pos = 0;
+        int relative_move = positions[i] - current_pos;
+        uint8_t direction = (relative_move >= 0) ? 0 : 1;
+        uint16_t steps = (relative_move >= 0) ? relative_move : -relative_move;
+
+        if(steps > 0) {
+            Emm_V5_Pos_Control(1, direction, 300, 40, steps, false, false);
+            HAL_Delay(3000);
+        }
+        current_pos = positions[i];
+    }
+
+    // Test 6: 急停测试
+    printf("Test 6: Emergency stop test\n");
+    printf("Starting continuous rotation...\n");
+    Emm_V5_Vel_Control(1, 0, 400, 50, false);
+    HAL_Delay(2000);
+
+    printf("Emergency stop!\n");
+    Emm_V5_Stop_Now(1, false);
+    HAL_Delay(1000);
+
+    printf("=== Stepper Motor Test Completed ===\n");
+    printf("Waiting 5 seconds before next test cycle...\n\n");
+    HAL_Delay(5000);
 }
