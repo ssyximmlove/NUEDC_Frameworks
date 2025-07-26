@@ -37,7 +37,9 @@ add_executable(${CMAKE_PROJECT_NAME}
         Core/Src/hal_oled.c
         Core/Inc/hal_oled.h
         Core/Src/key.c
-        Core/Inc/key.h)
+        Core/Inc/key.h
+        Core/Src/usart_dma.c
+        Core/Inc/usart_dma.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -70,6 +72,11 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
 
     # Add user defined libraries
+)
+
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+        -Wl,-u,_printf_float
+        -Wl,-u,_scanf_float
 )
 
 # Segger RTT

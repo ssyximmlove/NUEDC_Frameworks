@@ -33,6 +33,7 @@
 #include "hal_oled.h"
 #include "key.h"
 #include "Emm_V5.h"
+#include "usart_dma.h"
 
 /* USER CODE END Includes */
 
@@ -111,6 +112,7 @@ int main(void)
   MX_USART6_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+  USART_DMA_Init();
   HAL_Delay(100);
   SEGGER_RTT_Init();
   HAL_Delay(100);
