@@ -11,12 +11,15 @@
 #include <stdio.h>
 
 
+// 按键定义
+#define GIMBAL_CALIB_KEY_NUM 6
+
 // 云台轴定义
 #define YAW_MOTOR_ADDR      1
 #define PITCH_MOTOR_ADDR    2
 
 // 云台校准模式标志
-static bool gimbal_calib_mode = false;
+extern bool gimbal_calib_mode;
 
 // 云台状态枚举
 typedef enum {

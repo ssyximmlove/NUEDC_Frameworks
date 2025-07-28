@@ -38,12 +38,15 @@ add_executable(${CMAKE_PROJECT_NAME}
         Core/Inc/hal_oled.h
         Core/Src/key.c
         Core/Inc/key.h
-        Core/Src/usart_dma.c
-        Core/Inc/usart_dma.h
         Core/Src/gimbal.c
         Core/Inc/gimbal.h
         Core/Src/isr.c
-        Core/Inc/isr.h)
+        Core/Inc/isr.h
+        Core/Src/vision_uart.c
+        Core/Inc/vision_uart.h
+        Core/Src/stepper_uart.c
+        Core/Inc/stepper_uart.h
+)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)

@@ -35,7 +35,8 @@
 #include "Emm_V5.h"
 #include "gimbal.h"
 #include "isr.h"
-#include "usart_dma.h"
+#include "stepper_uart.h"
+#include "vision_uart.h"
 
 /* USER CODE END Includes */
 
@@ -113,11 +114,11 @@ int main(void)
   MX_USART6_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  USART_DMA_Init();
   HAL_Delay(100);
   SEGGER_RTT_Init();
   HAL_Timer6_Init();
-  HAL_Delay(100);
+  Vision_UART_Init();
+  Stepper_UART_Init();
 
   // Initialize OLED
   if (HAL_OLED_Init() != HAL_OK) {
@@ -141,6 +142,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    Gimbal_CalibModeHandler();
+
   }
   /* USER CODE END 3 */
 }
