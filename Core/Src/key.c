@@ -16,16 +16,8 @@ static KeyInfo_t keys[6] = {
     {GPIOE, GPIO_PIN_4, KEY_STATE_IDLE, 0, false, false,true},  // KEY3
     {GPIOE, GPIO_PIN_5, KEY_STATE_IDLE, 0, false, false,true},  // KEY4
     {GPIOE, GPIO_PIN_6, KEY_STATE_IDLE, 0, false, false,true},   // KEY5
-{GPIOA,GPIO_PIN_0,KEY_STATE_IDLE,0,false,false,false}, // KEY_BOARD
+    {GPIOA,GPIO_PIN_0,KEY_STATE_IDLE,0,false,false,false}, // KEY_BOARD
 };
-
-/**
- * @brief 初始化按键定时器
- */
-void HAL_Key_Init_Timer(void) {
-    HAL_TIM_Base_Start_IT(&htim6);
-    printf("50Hz Key Interrupt Started\n");
-}
 
 
 /**
@@ -147,15 +139,7 @@ void HAL_Key_WaitForRelease(void)
 }
 
 
-/**
- * @brief 定时器中断回调函数
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    if (htim->Instance == TIM6) {
-        HAL_Key_Timer_IRQHandler();
-    }
-}
+
 /**
  * @brief 按键定时器中断处理函数
  */

@@ -39,7 +39,6 @@ typedef enum {
 } GimbalMode_t;
 
 // 函数声明
-void Gimbal_Calibration_Mode_Check(void);
-void Triggered_to_Zero(void);
+void Gimbal_CalibModeHandler(void);
 
 #endif //GIMBAL_H

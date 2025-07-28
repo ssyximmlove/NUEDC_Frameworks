@@ -41,7 +41,9 @@ add_executable(${CMAKE_PROJECT_NAME}
         Core/Src/usart_dma.c
         Core/Inc/usart_dma.h
         Core/Src/gimbal.c
-        Core/Inc/gimbal.h)
+        Core/Inc/gimbal.h
+        Core/Src/isr.c
+        Core/Inc/isr.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)

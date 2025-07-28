@@ -34,6 +34,7 @@
 #include "key.h"
 #include "Emm_V5.h"
 #include "gimbal.h"
+#include "isr.h"
 #include "usart_dma.h"
 
 /* USER CODE END Includes */
@@ -115,7 +116,7 @@ int main(void)
   USART_DMA_Init();
   HAL_Delay(100);
   SEGGER_RTT_Init();
-  HAL_Key_Init_Timer();
+  HAL_Timer6_Init();
   HAL_Delay(100);
 
   // Initialize OLED
@@ -140,8 +141,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    Gimbal_Calibration_Mode_Check();
-    Triggered_to_Zero();
   }
   /* USER CODE END 3 */
 }
