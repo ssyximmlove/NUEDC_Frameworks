@@ -20,8 +20,20 @@
 #define KEY5_GPIO_Port GPIOE
 #define KEY5_Pin GPIO_PIN_6
 
+#define KEY_BOARD_Port GPIOA
+#define KEY_BOARD_Pin GPIO_PIN_0
+
 // 消抖时间定义（ms）
 #define KEY_DEBOUNCE_TIME 20
+#define KEY_LONG_PRESS_TIME    800
+#define KEY_DOUBLE_CLICK_GAP   300
+
+typedef enum {
+    KEY_EVENT_NONE = 0,
+    KEY_EVENT_SINGLE_CLICK,
+    KEY_EVENT_DOUBLE_CLICK,
+    KEY_EVENT_LONG_PRESS
+} KeyEventType_t;
 
 // 按键状态定义
 typedef enum {
@@ -30,7 +42,8 @@ typedef enum {
     KEY2_PRESSED,
     KEY3_PRESSED,
     KEY4_PRESSED,
-    KEY5_PRESSED
+    KEY5_PRESSED,
+    KEY_BOARD_PRESSED,
 } KeyState_t;
 
 // 按键扫描模式
@@ -55,6 +68,12 @@ typedef struct {
     uint32_t debounce_timer;
     bool is_pressed;
     bool key_event;
+    bool active_level; // true: 低电平有效，false: 高电平有效
+    uint32_t last_press_time;
+    uint32_t last_release_time;
+    uint8_t click_count;
+    bool long_press_reported;
+    KeyEventType_t event_type;
 } KeyInfo_t;
 
 // 函数声明
@@ -66,4 +85,7 @@ KeyState_t HAL_Key_Scan(KeyMode_t mode);
 bool HAL_Key_IsPressed(uint8_t key_num);
 void HAL_Key_WaitForRelease(void);
 void HAL_Key_Process(void);
+KeyEventType_t HAL_Key_GetEvent(uint8_t key_num);
+
+void key_test(void); // 测试函数
 #endif //KEY_H

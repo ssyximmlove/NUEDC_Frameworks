@@ -9,12 +9,14 @@
 #include "tim.h"
 
 // 按键信息数组
-static KeyInfo_t keys[5] = {
-    {GPIOE, GPIO_PIN_2, KEY_STATE_IDLE, 0, false, false},  // KEY1
-    {GPIOE, GPIO_PIN_3, KEY_STATE_IDLE, 0, false, false},  // KEY2
-    {GPIOE, GPIO_PIN_4, KEY_STATE_IDLE, 0, false, false},  // KEY3
-    {GPIOE, GPIO_PIN_5, KEY_STATE_IDLE, 0, false, false},  // KEY4
-    {GPIOE, GPIO_PIN_6, KEY_STATE_IDLE, 0, false, false}   // KEY5
+static KeyInfo_t keys[6] = {
+
+    {GPIOE, GPIO_PIN_2, KEY_STATE_IDLE, 0, false, false,true},  // KEY1
+    {GPIOE, GPIO_PIN_3, KEY_STATE_IDLE, 0, false, false,true},  // KEY2
+    {GPIOE, GPIO_PIN_4, KEY_STATE_IDLE, 0, false, false,true},  // KEY3
+    {GPIOE, GPIO_PIN_5, KEY_STATE_IDLE, 0, false, false,true},  // KEY4
+    {GPIOE, GPIO_PIN_6, KEY_STATE_IDLE, 0, false, false,true},   // KEY5
+{GPIOA,GPIO_PIN_0,KEY_STATE_IDLE,0,false,false,false}, // KEY_BOARD
 };
 
 /**
@@ -22,7 +24,7 @@ static KeyInfo_t keys[5] = {
  */
 void HAL_Key_Init_Timer(void) {
     HAL_TIM_Base_Start_IT(&htim6);
-    printf("50Hz按键中断扫描启动\n");
+    printf("50Hz Key Interrupt Started\n");
 }
 
 
@@ -32,48 +34,70 @@ void HAL_Key_Init_Timer(void) {
  */
 static void key_state_machine(KeyInfo_t* key_info)
 {
-    bool current_level = (HAL_GPIO_ReadPin(key_info->gpio_port, key_info->gpio_pin) == GPIO_PIN_RESET);
-    uint32_t current_time = HAL_GetTick();
+    GPIO_PinState pin_state = HAL_GPIO_ReadPin(key_info->gpio_port, key_info->gpio_pin);
+    bool current_level = key_info->active_level ? (pin_state == GPIO_PIN_RESET) : (pin_state == GPIO_PIN_SET);
+    uint32_t now = HAL_GetTick();
 
     switch (key_info->state) {
         case KEY_STATE_IDLE:
             if (current_level) {
                 key_info->state = KEY_STATE_DEBOUNCE;
-                key_info->debounce_timer = current_time;
+                key_info->debounce_timer = now;
+            }
+            // 检查单击/双击超时
+            if (key_info->click_count == 1 && (now - key_info->last_release_time > KEY_DOUBLE_CLICK_GAP)) {
+                key_info->event_type = KEY_EVENT_SINGLE_CLICK;
+                key_info->click_count = 0;
             }
             break;
-
         case KEY_STATE_DEBOUNCE:
             if (current_level) {
-                if ((current_time - key_info->debounce_timer) >= KEY_DEBOUNCE_TIME) {
+                if ((now - key_info->debounce_timer) >= KEY_DEBOUNCE_TIME) {
                     key_info->state = KEY_STATE_PRESSED;
                     key_info->is_pressed = true;
                     key_info->key_event = true;
+                    key_info->last_press_time = now;
+                    key_info->long_press_reported = false;
                 }
             } else {
                 key_info->state = KEY_STATE_IDLE;
             }
             break;
-
         case KEY_STATE_PRESSED:
+            // 长按检测
+            if (!key_info->long_press_reported && (now - key_info->last_press_time > KEY_LONG_PRESS_TIME)) {
+                key_info->event_type = KEY_EVENT_LONG_PRESS;
+                key_info->long_press_reported = true;
+                key_info->click_count = 0; // 长按不再计入单/双击
+            }
             if (!current_level) {
                 key_info->state = KEY_STATE_RELEASE;
-                key_info->debounce_timer = current_time;
+                key_info->debounce_timer = now;
+                key_info->is_pressed = false;
+                key_info->last_release_time = now;
+                if (!key_info->long_press_reported) {
+                    key_info->click_count++;
+                    if (key_info->click_count == 2 && (now - key_info->last_release_time < KEY_DOUBLE_CLICK_GAP)) {
+                        key_info->event_type = KEY_EVENT_DOUBLE_CLICK;
+                        key_info->click_count = 0;
+                    }
+                }
             }
             break;
-
         case KEY_STATE_RELEASE:
             if (!current_level) {
-                if ((current_time - key_info->debounce_timer) >= KEY_DEBOUNCE_TIME) {
+                if ((now - key_info->debounce_timer) >= KEY_DEBOUNCE_TIME) {
                     key_info->state = KEY_STATE_IDLE;
-                    key_info->is_pressed = false;
                 }
             } else {
                 key_info->state = KEY_STATE_PRESSED;
+                key_info->last_press_time = now;
+                key_info->long_press_reported = false;
             }
             break;
     }
 }
+
 
 /**
  * @brief 按键扫描函数
@@ -82,27 +106,20 @@ static void key_state_machine(KeyInfo_t* key_info)
  */
 KeyState_t HAL_Key_Scan(KeyMode_t mode)
 {
-    // 处理状态机
-    // HAL_Key_Process();
-
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         if (mode == KEY_MODE_SINGLE) {
-            // 单次模式：检测按键事件
             if (keys[i].key_event) {
-                keys[i].key_event = false;  // 清除事件标志
+                keys[i].key_event = false;
                 return (KeyState_t)(i + 1);
             }
         } else {
-            // 连续模式：检测按键状态
             if (keys[i].is_pressed) {
                 return (KeyState_t)(i + 1);
             }
         }
     }
-
     return KEY_NONE;
 }
-
 /**
  * @brief 检测指定按键是否被按下
  * @param key_num 按键编号 (1-5)
@@ -110,10 +127,9 @@ KeyState_t HAL_Key_Scan(KeyMode_t mode)
  */
 bool HAL_Key_IsPressed(uint8_t key_num)
 {
-    if (key_num < 1 || key_num > 5) {
+    if (key_num < 1 || key_num > 6) {
         return false;
     }
-
     return keys[key_num - 1].is_pressed;
 }
 
@@ -124,9 +140,12 @@ void HAL_Key_WaitForRelease(void)
 {
     do {
         HAL_Delay(10);
-    } while (keys[0].is_pressed || keys[1].is_pressed || keys[2].is_pressed ||
-             keys[3].is_pressed || keys[4].is_pressed);
+    } while (
+        keys[0].is_pressed || keys[1].is_pressed || keys[2].is_pressed ||
+        keys[3].is_pressed || keys[4].is_pressed || keys[5].is_pressed
+    );
 }
+
 
 /**
  * @brief 定时器中断回调函数
@@ -143,77 +162,61 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void HAL_Key_Timer_IRQHandler(void)
 {
     // 直接处理按键状态机，无需频率控制
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         key_state_machine(&keys[i]);
     }
 }
 
-// TODO: 五向按键测试
+KeyEventType_t HAL_Key_GetEvent(uint8_t key_num)
+{
+    if (key_num < 1 || key_num > 6) return KEY_EVENT_NONE;
+    KeyEventType_t evt = keys[key_num-1].event_type;
+    keys[key_num-1].event_type = KEY_EVENT_NONE;
+    return evt;
+}
+
+// 五向按键测试
 void key_test(void)
 {
-    static uint32_t test_counter = 0;
     static uint32_t continuous_counter = 0;
+    static bool last_any_pressed = false;
+    static uint32_t last_hold_update = 0;
 
-    printf("\n=== 按键测试 ===\n");
-    printf("测试次数: %lu\n", ++test_counter);
-
-    // 测试单次扫描模式
-    KeyState_t single_key = HAL_Key_Scan(KEY_MODE_SINGLE);
-    if (single_key != KEY_NONE) {
-        printf("单次模式 - 按键%d被按下\n", single_key);
-
-        switch(single_key) {
-            case KEY1_PRESSED:
-                printf("  -> 执行KEY1功能：菜单向上\n");
-                break;
-            case KEY2_PRESSED:
-                printf("  -> 执行KEY2功能：菜单向下\n");
-                break;
-            case KEY3_PRESSED:
-                printf("  -> 执行KEY3功能：确认选择\n");
-                break;
-            case KEY4_PRESSED:
-                printf("  -> 执行KEY4功能：返回上级\n");
-                break;
-            case KEY5_PRESSED:
-                printf("  -> 执行KEY5功能：设置模式\n");
-                break;
-            default:
-                break;
-        }
-    }
-
-    // 测试连续扫描模式
     KeyState_t continuous_key = HAL_Key_Scan(KEY_MODE_CONTINUOUS);
-    if (continuous_key != KEY_NONE) {
-        continuous_counter++;
-        printf("连续模式 - 按键%d持续按下 (计数: %lu)\n", continuous_key, continuous_counter);
+    uint32_t now = HAL_GetTick();
 
-        if (continuous_key == KEY1_PRESSED) {
-            printf("  -> 数值持续增加...\n");
-        } else if (continuous_key == KEY2_PRESSED) {
-            printf("  -> 数值持续减少...\n");
+    if (continuous_key != KEY_NONE) {
+        if (!last_any_pressed) {
+            last_hold_update = now;
+            continuous_counter = 0;
+            last_any_pressed = true;
+            printf("[Key] Continuous mode - Key %d held\n", continuous_key);
+        }
+        // 每秒加一
+        if (now - last_hold_update >= 1000) {
+            continuous_counter++;
+            last_hold_update += 1000;
+            printf("[Key] Hold count: %lu\n", continuous_counter);
         }
     } else {
-        if (continuous_counter > 0) {
-            printf("连续按键结束，总计数: %lu\n", continuous_counter);
+        if (last_any_pressed) {
+            printf("[Key] All keys released, total hold count: %lu\n", continuous_counter);
+            last_any_pressed = false;
             continuous_counter = 0;
         }
     }
 
-    // 测试单个按键状态检测
-    for (int i = 1; i <= 5; i++) {
-        if (HAL_Key_IsPressed(i)) {
-            printf("按键%d当前处于按下状态\n", i);
+    // 检测单击、双击、长按
+    for (int i = 0; i < 6; i++) {
+        KeyEventType_t evt = HAL_Key_GetEvent(i+1);
+        if (evt == KEY_EVENT_SINGLE_CLICK) {
+            printf("[Key] Key %d Single\n", i+1);
+        } else if (evt == KEY_EVENT_DOUBLE_CLICK) {
+            printf("[Key] Key %d Double\n", i+1);
+        } else if (evt == KEY_EVENT_LONG_PRESS) {
+            printf("[Key] Key %d Long Press\n", i+1);
         }
     }
-
-    // 显示所有按键当前状态
-    printf("按键状态: ");
-    for (int i = 1; i <= 5; i++) {
-        printf("K%d:%s ", i, HAL_Key_IsPressed(i) ? "按下" : "释放");
-    }
-    printf("\n");
 }
 
 /**

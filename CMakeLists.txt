@@ -39,7 +39,9 @@ add_executable(${CMAKE_PROJECT_NAME}
         Core/Src/key.c
         Core/Inc/key.h
         Core/Src/usart_dma.c
-        Core/Inc/usart_dma.h)
+        Core/Inc/usart_dma.h
+        Core/Src/gimbal.c
+        Core/Inc/gimbal.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -73,10 +75,17 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
 )
-
+# 开启浮点打印
 target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
         -Wl,-u,_printf_float
         -Wl,-u,_scanf_float
+)
+
+# 启用FPU浮点运算库
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+        -mfloat-abi=hard
+        -mfpu=vfpv4-d16
+
 )
 
 # Segger RTT

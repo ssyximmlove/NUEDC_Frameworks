@@ -31,6 +31,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "arm_math.h"
 
 /* USER CODE END Includes */
 
@@ -64,6 +65,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define Key_Board_Pin GPIO_PIN_0
+#define Key_Board_GPIO_Port GPIOA
 #define LED_Board_Pin GPIO_PIN_2
 #define LED_Board_GPIO_Port GPIOB
 #define Servo_1_Pin GPIO_PIN_12

@@ -33,6 +33,7 @@
 #include "hal_oled.h"
 #include "key.h"
 #include "Emm_V5.h"
+#include "gimbal.h"
 #include "usart_dma.h"
 
 /* USER CODE END Includes */
@@ -104,7 +105,6 @@ int main(void)
   MX_SPI1_Init();
   MX_SPI2_Init();
   MX_TIM4_Init();
-  MX_UART4_Init();
   MX_UART5_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
@@ -115,6 +115,7 @@ int main(void)
   USART_DMA_Init();
   HAL_Delay(100);
   SEGGER_RTT_Init();
+  HAL_Key_Init_Timer();
   HAL_Delay(100);
 
   // Initialize OLED
@@ -126,8 +127,10 @@ int main(void)
     // 可以安全使用OLED功能
   }
 
-  HAL_OLED_Test();
-  Emm_V5_Test();
+  printf("Board Peripherals Initialized\n");
+
+  // HAL_OLED_Test();
+  // Emm_V5_Test();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -137,7 +140,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
+    Gimbal_Calibration_Mode_Check();
+    Triggered_to_Zero();
   }
   /* USER CODE END 3 */
 }
