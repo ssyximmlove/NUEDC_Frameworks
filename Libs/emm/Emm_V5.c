@@ -11,12 +11,12 @@
 
 void usart_SendCmd(uint8_t *cmd, uint8_t len)
 {
-  // 打印发送的数据
-  // printf("USART3->Stepper Sending[%d Bytes]: ", len);
-  // for(int i = 0; i < len; i++) {
-  //   printf("0x%02X ", cmd[i]);
-  // }
-  // printf("\n");
+  // /打印发送的数据
+  printf("USART3->Stepper Sending[%d Bytes]: ", len);
+  for(int i = 0; i < len; i++) {
+    printf("0x%02X ", cmd[i]);
+  }
+  printf("\n");
 
   // 使用DMA发送数据
   HAL_UART_Transmit_DMA(&huart3, cmd, len);

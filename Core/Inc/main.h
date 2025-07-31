@@ -60,6 +60,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define Key_Board_Pin GPIO_PIN_0
 #define Key_Board_GPIO_Port GPIOA
+#define Laser_Pin GPIO_PIN_4
+#define Laser_GPIO_Port GPIOC
 #define LED_Board_Pin GPIO_PIN_2
 #define LED_Board_GPIO_Port GPIOB
 #define Servo_1_Pin GPIO_PIN_12
@@ -70,6 +72,8 @@ void Error_Handler(void);
 #define Servo_3_GPIO_Port GPIOD
 
 /* USER CODE BEGIN Private defines */
+#define LazerON HAL_GPIO_WritePin(Laser_GPIO_Port,Laser_Pin,1);
+#define LazerOFF HAL_GPIO_WritePin(Laser_GPIO_Port,Laser_Pin,0);
 
 /* USER CODE END Private defines */
 

@@ -133,6 +133,7 @@ int main(void)
 
   // HAL_OLED_Test();
   // Emm_V5_Test();
+  // HAL_GPIO_WritePin(Laser_GPIO_Port,Laser_Pin,1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -143,6 +144,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     Gimbal_CalibModeHandler();
+    Vision_ProcessData();
 
   }
   /* USER CODE END 3 */

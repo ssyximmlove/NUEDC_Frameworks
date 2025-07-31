@@ -3,7 +3,9 @@
 //
 
 #include "../Inc/vision_uart.h"
+#include "arm_math.h"
 
+static volatile VisionData_t s_vision_data = {0};
 
 // --- 缓冲区定义 for USART2 (Vision) ---
 #define DMA_RX_BUFFER_SIZE_U2   256  // DMA硬件直接操作的缓冲区
@@ -60,5 +62,124 @@ uint16_t Vision_UART_Read(uint8_t* buffer, uint16_t len)
  */
 uint16_t Vision_UART_Available(void)
 {
-    return (g_ring_buffer_head_u2 + RING_BUFFER_SIZE_U2 - g_ring_buffer_tail_u2) % RING_BUFFER_SIZE_U2;
+    __disable_irq();
+    uint16_t available = (g_ring_buffer_head_u2 + RING_BUFFER_SIZE_U2 - g_ring_buffer_tail_u2) % RING_BUFFER_SIZE_U2;
+    __enable_irq();
+    return available;
+}
+
+/**
+ * @brief Parses a single byte from the UART stream using a state machine.
+ * @param byte The byte to parse.
+ */
+static void ParseByte(uint8_t byte) {
+    static ParserState_t parser_state = PARSER_STATE_WAIT_HEADER;
+    static uint8_t current_cmd = 0;
+    static uint8_t data_buffer[4]; // For coordinates
+    static uint8_t data_received_count = 0;
+
+    switch (parser_state) {
+        case PARSER_STATE_WAIT_HEADER:
+            if (byte == VISION_PACKET_HEADER) {
+                parser_state = PARSER_STATE_WAIT_CMD;
+            }
+            break;
+
+        case PARSER_STATE_WAIT_CMD:
+            current_cmd = byte;
+            if (current_cmd == CMD_TARGET_FOUND) {
+                data_received_count = 0;
+                parser_state = PARSER_STATE_WAIT_DATA;
+            } else if (current_cmd == CMD_TARGET_NOT_FOUND) {
+                parser_state = PARSER_STATE_WAIT_TRAILER_R;
+            } else {
+                // Invalid command, reset and wait for the next header
+                parser_state = PARSER_STATE_WAIT_HEADER;
+            }
+            break;
+
+        case PARSER_STATE_WAIT_DATA:
+            data_buffer[data_received_count++] = byte;
+            if (data_received_count >= 4) {
+                parser_state = PARSER_STATE_WAIT_TRAILER_R;
+            }
+            break;
+
+        case PARSER_STATE_WAIT_TRAILER_R:
+            if (byte == VISION_PACKET_TRAILER_R) {
+                parser_state = PARSER_STATE_WAIT_TRAILER_N;
+            } else {
+                // Invalid trailer, reset
+                parser_state = PARSER_STATE_WAIT_HEADER;
+            }
+            break;
+
+        case PARSER_STATE_WAIT_TRAILER_N:
+            if (byte == VISION_PACKET_TRAILER_N) {
+                // Packet is complete and valid, process it
+                if (current_cmd == CMD_TARGET_FOUND) {
+                    // Assuming little-endian: [x_low, x_high, y_low, y_high]
+                    s_vision_data.x = (uint16_t)((data_buffer[1] << 8) | data_buffer[0]);
+                    s_vision_data.y = (uint16_t)((data_buffer[3] << 8) | data_buffer[2]);
+                    s_vision_data.is_found = true;
+                    s_vision_data.last_update_time = HAL_GetTick();
+                    printf("Vision: Target FOUND at (X: %u, Y: %u)\n",s_vision_data.x,s_vision_data.y);
+                } else if (current_cmd == CMD_TARGET_NOT_FOUND) {
+                    s_vision_data.is_found = false;
+                    s_vision_data.last_update_time = HAL_GetTick();
+                    printf("Vision: Target NOT_FOUND\n");
+                }
+            }
+            // Reset for the next packet, regardless of whether the tail was valid or not
+            parser_state = PARSER_STATE_WAIT_HEADER;
+            break;
+
+        default:
+            // Should not happen, but as a safeguard, reset the state
+            parser_state = PARSER_STATE_WAIT_HEADER;
+            break;
+    }
+}
+void Vision_ProcessData(void) {
+    uint8_t byte_buffer[64]; // Process up to 64 bytes at a time
+    uint16_t bytes_to_read = Vision_UART_Available();
+
+    if (bytes_to_read > 0) {
+        uint16_t bytes_read = Vision_UART_Read(byte_buffer, sizeof(byte_buffer));
+        for (uint16_t i = 0; i < bytes_read; i++) {
+            ParseByte(byte_buffer[i]);
+        }
+    }
+
+    // Timeout check: If no valid packet has been received for a while, assume the target is lost.
+    if (s_vision_data.is_found && (HAL_GetTick() - s_vision_data.last_update_time > VISION_DATA_TIMEOUT_MS)) {
+        s_vision_data.is_found = false;
+        printf("Vision target lost due to timeout.\n");
+    }
+
+    if (s_vision_data.is_found) {
+        float32_t dx = (float32_t)s_vision_data.x - TARGET_X;
+        float32_t dy = (float32_t)s_vision_data.y - TARGET_Y;
+        float32_t abs_dx, abs_dy;
+        arm_abs_f32(&dx, &abs_dx, 1);
+        arm_abs_f32(&dy, &abs_dy, 1);
+        if (abs_dx <= TARGET_TOLERANCE && abs_dy <= TARGET_TOLERANCE) {
+            LazerON;
+        } else {
+            LazerOFF;
+        }
+    } else {
+        HAL_GPIO_WritePin(Laser_GPIO_Port, Laser_Pin, GPIO_PIN_RESET);     // 关激光
+    }
+}
+
+bool Vision_GetTarget(uint16_t *x, uint16_t *y) {
+    __disable_irq();
+    bool found = s_vision_data.is_found;
+    if (found) {
+        *x = s_vision_data.x;
+        *y = s_vision_data.y;
+    }
+    __enable_irq();
+    return found;
 }

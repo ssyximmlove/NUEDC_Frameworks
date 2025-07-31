@@ -46,6 +46,22 @@ add_executable(${CMAKE_PROJECT_NAME}
         Core/Inc/vision_uart.h
         Core/Src/stepper_uart.c
         Core/Inc/stepper_uart.h
+        Core/Src/pid.c
+        Core/Src/pid.h
+)
+
+add_library(cmsis_dsp STATIC IMPORTED)
+
+set_target_properties(cmsis_dsp PROPERTIES
+        # 设置 .a 文件的实际路径
+        IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/Middlewares/ST/ARM/DSP/Lib/libarm_cortexM4lf_math.a
+
+        # 告诉 CMake，任何链接到 cmsis_dsp 的目标，都应该自动包含这个头文件目录
+        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/Middlewares/ST/ARM/DSP/Inc
+
+        # 告诉 CMake，任何链接到 cmsis_dsp 的目标，都应该自动添加这个宏定义
+        # [重要] 请根据你的 MCU 型号修改这个宏 (例如 ARM_MATH_CM7)
+        INTERFACE_COMPILE_DEFINITIONS "ARM_MATH_CM4"
 )
 
 # Add STM32CubeMX generated sources
@@ -54,6 +70,7 @@ add_subdirectory(cmake/stm32cubemx)
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
+
 )
 
 # Add sources to executable
@@ -64,6 +81,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+        ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/DSP/Include
+        ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/DSP/Include/dsp
 )
 
 # Add project symbols (macros)
@@ -77,6 +96,8 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
+        cmsis_dsp
+
 
     # Add user defined libraries
 )

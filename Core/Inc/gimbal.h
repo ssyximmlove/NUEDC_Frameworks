@@ -9,6 +9,7 @@
 #include "Emm_V5.h"
 #include "stdbool.h"
 #include <stdio.h>
+#include "arm_math.h"
 
 
 // 按键定义
@@ -17,6 +18,19 @@
 // 云台轴定义
 #define YAW_MOTOR_ADDR      1
 #define PITCH_MOTOR_ADDR    2
+
+// 例如: 1.8度电机, 16细分 -> (360 / 1.8) * 16 = 3200
+#define GIMBAL_STEPS_PER_REVOLUTION 3200
+#define GIMBAL_ANGLE_PER_STEP       (360.0f / GIMBAL_STEPS_PER_REVOLUTION)
+
+#define GIMBAL_CALIB_TIMEOUT_MS 10000 // 校准模式超时时间 (10秒)
+
+#ifndef PI
+#define PI 3.14159265358979323846
+#endif
+#define DEG_TO_RAD (PI / 180.0f)
+#define RAD_TO_DEG (180.0f / PI)
+
 
 // 云台校准模式标志
 extern bool gimbal_calib_mode;
@@ -43,5 +57,6 @@ typedef enum {
 
 // 函数声明
 void Gimbal_CalibModeHandler(void);
-
+void Gimbal_MovePolar(uint32_t radius, float angle, uint16_t speed);
+void Gimbal_MoveToXYZ(float x, float y, float z, uint16_t speed);
 #endif //GIMBAL_H
