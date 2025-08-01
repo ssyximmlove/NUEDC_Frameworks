@@ -9,22 +9,47 @@
 ***	qq交流群：262438510
 **********************************************************/
 
-void usart_SendCmd(uint8_t *cmd, uint8_t len)
+// volatile bool usart3_tx_done = true;
+// void usart_SendCmd(uint8_t *cmd, uint8_t len)
+// {
+//   // /打印发送的数据
+//   printf("USART3->Stepper Sending[%d Bytes]: ", len);
+//   for(int i = 0; i < len; i++) {
+//     printf("0x%02X ", cmd[i]);
+//   }
+//   printf("\n");
+//
+//   // 使用DMA发送数据
+//   HAL_UART_Transmit_DMA(&huart3, cmd, len);
+//
+//   // 等待发送完成
+//   // while(huart3.gState != HAL_UART_STATE_READY) {
+//   //   HAL_Delay(1);
+//   // }
+// }
+
+static volatile bool usart_tx_busy = false;
+
+bool usart_SendCmd(uint8_t *cmd, uint16_t len)
 {
-  // /打印发送的数据
-  printf("USART3->Stepper Sending[%d Bytes]: ", len);
-  for(int i = 0; i < len; i++) {
-    printf("0x%02X ", cmd[i]);
+  if (usart_tx_busy)
+  {
+    // 正在发送，拒绝本次发送
+    return false;
   }
-  printf("\n");
 
-  // 使用DMA发送数据
-  HAL_UART_Transmit_DMA(&huart3, cmd, len);
+  usart_tx_busy = true;
+  HAL_StatusTypeDef status = HAL_UART_Transmit(&huart3, cmd, len, 100);
+  usart_tx_busy = false;
 
-  // 等待发送完成
-  while(huart3.gState != HAL_UART_STATE_READY) {
-    HAL_Delay(1);
-  }
+  // printf("USART3->Sending [%d Bytes]: ", len);
+  //   for (uint16_t i = 0; i < len; i++)
+  //   {
+  //       printf("0x%02X ", cmd[i]);
+  //   }
+    // printf("\n");
+
+  return (status == HAL_OK);
 }
 
 /**
@@ -356,6 +381,14 @@ void Emm_V5_Origin_Interrupt(uint8_t addr)
   // 发送命令
   usart_SendCmd(cmd, 4);
 }
+
+void Emm_V5_Get_Cur_Pos(uint8_t addr)
+{
+  uint8_t cmd[3] = {addr, 0x36, 0x6B};
+  usart_SendCmd(cmd, 3);
+}
+
+
 
 
 void Emm_V5_Test(void)

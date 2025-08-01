@@ -113,10 +113,10 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USART6_UART_Init();
   MX_TIM6_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   HAL_Delay(100);
   SEGGER_RTT_Init();
-  HAL_Timer6_Init();
   Vision_UART_Init();
   Stepper_UART_Init();
 
@@ -129,11 +129,17 @@ int main(void)
     // 可以安全使用OLED功能
   }
 
+  HAL_Timer_Init();
+
+  Gimbal_PID_Init();
+
   printf("Board Peripherals Initialized\n");
+  printf("System Ready. Entering main loop...\n\n");
 
   // HAL_OLED_Test();
   // Emm_V5_Test();
   // HAL_GPIO_WritePin(Laser_GPIO_Port,Laser_Pin,1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -143,8 +149,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+
     Gimbal_CalibModeHandler();
-    Vision_ProcessData();
+
+
+    if (gimbal_tracking_mode) {
+      Vision_ProcessData();
+      Gimbal_Tracking_Handler();
+    } else {
+#if GIMBAL_DRY_RUN_MODE == 1
+      static uint32_t last_info = 0;
+      if (HAL_GetTick() - last_info >= 2000) {
+        printf("[DRY RUN] Tracking Disabled. Waiting for long press on KEY4...\n");
+        last_info = HAL_GetTick();
+      }
+#endif
+    }
 
   }
   /* USER CODE END 3 */

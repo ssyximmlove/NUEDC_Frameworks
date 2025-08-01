@@ -7,6 +7,7 @@
 
 #include "key.h"
 #include "gimbal.h"
+#include "stepper_uart.h"
 #include "tim.h"
 #include "usart.h"
 
@@ -26,6 +27,8 @@ extern uint8_t g_ring_buffer_u3[];
 #define DMA_RX_BUFFER_SIZE_U3   128
 #define RING_BUFFER_SIZE_U3     512
 
-void HAL_Timer6_Init(void);
+extern volatile GimbalCommState g_gimbal_state;
+
+void HAL_Timer_Init(void);
 
 #endif //ISR_H

@@ -9,6 +9,17 @@
 #include <string.h>
 #include <stdio.h>
 
+
+typedef enum {
+    STATE_SEND_PITCH,
+    STATE_WAIT_PITCH,
+    STATE_SEND_YAW,
+    STATE_WAIT_YAW
+} GimbalCommState;
+
+extern volatile GimbalCommState g_gimbal_state;
+
+
 /**
  * @brief 初始化步进电机串口（USART3）的DMA接收功能
  */
@@ -27,6 +38,12 @@ uint16_t Stepper_UART_Read(uint8_t* buffer, uint16_t len);
  * @return 可用数据的字节数
  */
 uint16_t Stepper_UART_Available(void);
+
+
+extern float g_yaw_angle;
+extern float g_pitch_angle;
+
+void Stepper_UART_HandleData(void);
 
 
 #endif //STEPPER_UART_H

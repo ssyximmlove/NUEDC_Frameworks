@@ -19,6 +19,17 @@
 #define YAW_MOTOR_ADDR      1
 #define PITCH_MOTOR_ADDR    2
 
+#define Gimbal_Yaw_Left 0
+#define Gimbal_Yaw_Right 1
+
+#define Gimbal_Pitch_Up 1
+#define Gimbal_Pitch_Down 0
+
+#define YAW_MIN_ANGLE   -45.0f
+#define YAW_MAX_ANGLE    45.0f
+#define PITCH_MIN_ANGLE -80.0f
+#define PITCH_MAX_ANGLE  25.0f
+
 // 例如: 1.8度电机, 16细分 -> (360 / 1.8) * 16 = 3200
 #define GIMBAL_STEPS_PER_REVOLUTION 3200
 #define GIMBAL_ANGLE_PER_STEP       (360.0f / GIMBAL_STEPS_PER_REVOLUTION)
@@ -34,6 +45,8 @@
 
 // 云台校准模式标志
 extern bool gimbal_calib_mode;
+extern bool gimbal_tracking_mode;
+
 
 // 云台状态枚举
 typedef enum {
@@ -59,4 +72,11 @@ typedef enum {
 void Gimbal_CalibModeHandler(void);
 void Gimbal_MovePolar(uint32_t radius, float angle, uint16_t speed);
 void Gimbal_MoveToXYZ(float x, float y, float z, uint16_t speed);
+void Gimbal_LimitProtect(void);
+void Gimbal_PID_Init(void);
+void Gimbal_Tracking_Handler(void);
+void Gimbal_SetTrackingMode(bool enable);
+
+void Gimbal_SweepAndTrack_Handler(void);
+
 #endif //GIMBAL_H

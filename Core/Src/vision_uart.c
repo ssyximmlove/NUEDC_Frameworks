@@ -123,11 +123,11 @@ static void ParseByte(uint8_t byte) {
                     s_vision_data.y = (uint16_t)((data_buffer[3] << 8) | data_buffer[2]);
                     s_vision_data.is_found = true;
                     s_vision_data.last_update_time = HAL_GetTick();
-                    printf("Vision: Target FOUND at (X: %u, Y: %u)\n",s_vision_data.x,s_vision_data.y);
+                    // printf("Vision: Target FOUND at (X: %u, Y: %u)\n",s_vision_data.x,s_vision_data.y);
                 } else if (current_cmd == CMD_TARGET_NOT_FOUND) {
                     s_vision_data.is_found = false;
                     s_vision_data.last_update_time = HAL_GetTick();
-                    printf("Vision: Target NOT_FOUND\n");
+                    // printf("Vision: Target NOT_FOUND\n");
                 }
             }
             // Reset for the next packet, regardless of whether the tail was valid or not
@@ -155,21 +155,6 @@ void Vision_ProcessData(void) {
     if (s_vision_data.is_found && (HAL_GetTick() - s_vision_data.last_update_time > VISION_DATA_TIMEOUT_MS)) {
         s_vision_data.is_found = false;
         printf("Vision target lost due to timeout.\n");
-    }
-
-    if (s_vision_data.is_found) {
-        float32_t dx = (float32_t)s_vision_data.x - TARGET_X;
-        float32_t dy = (float32_t)s_vision_data.y - TARGET_Y;
-        float32_t abs_dx, abs_dy;
-        arm_abs_f32(&dx, &abs_dx, 1);
-        arm_abs_f32(&dy, &abs_dy, 1);
-        if (abs_dx <= TARGET_TOLERANCE && abs_dy <= TARGET_TOLERANCE) {
-            LazerON;
-        } else {
-            LazerOFF;
-        }
-    } else {
-        HAL_GPIO_WritePin(Laser_GPIO_Port, Laser_Pin, GPIO_PIN_RESET);     // 关激光
     }
 }
 

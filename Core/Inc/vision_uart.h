@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 #define TARGET_X 160
-#define TARGET_Y 90
+#define TARGET_Y 120
 #define TARGET_TOLERANCE 5
 
 #define VISION_PACKET_HEADER    0xAA
@@ -66,5 +66,10 @@ uint16_t Vision_UART_Available(void);
  * @brief 处理视觉模块数据
  */
 void Vision_ProcessData(void);
+
+/*
+ * @brief 获取视觉模块数据
+ */
+bool Vision_GetTarget(uint16_t *x, uint16_t *y);
 
 #endif //VISION_UART_H

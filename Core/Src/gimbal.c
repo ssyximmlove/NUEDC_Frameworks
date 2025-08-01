@@ -7,7 +7,13 @@
 #include <stdlib.h>
 #include "arm_math.h"
 #include "key.h"
+#include "stepper_uart.h"
+#include "vision_uart.h"
+#include "stdio.h"
+#include "tim.h"
 
+
+#define GIMBAL_DRY_RUN_MODE 0
 
 // --- 模块级变量 ---
 // 云台校准模式标志的定义
@@ -16,6 +22,8 @@ bool gimbal_calib_mode = false;
 // 云台初始化状态 (当前未使用，为未来扩展保留)
 static GimbalInit_t gimbal_init_status = {0};
 
+static bool target_lost = false;
+static uint32_t target_lost_time = 0;
 
 // --- 私有辅助函数声明 ---
 static void Gimbal_EnterCalibMode(void);
@@ -28,50 +36,196 @@ static void Gimbal_CircleTest(void);
 static void Gimbal_VelocityCircleTest();
 static void Gimbal_VelocityLineTest(int32_t start_yaw, int32_t start_pitch, int32_t end_yaw, int32_t end_pitch, float32_t duration_s);
 
+static arm_pid_instance_f32 pid_yaw;
+static arm_pid_instance_f32 pid_pitch;
+
+bool gimbal_tracking_mode = false;
+
+void Gimbal_PID_Init() {
+    // --- Yaw 轴 (左右) PID 参数 ---
+    // Kp: 比例项，主要影响响应速度。值越大，响应越快，但可能导致超调和震荡。
+    // Ki: 积分项，用于消除稳态误差。值太大会导致积分饱和和响应变慢。
+    // Kd: 微分项，用于抑制震荡，增加系统阻尼。值太大会引入高频噪声。
+    pid_yaw.Kp = 0.1f;
+    pid_yaw.Ki = 0.00f;
+    pid_yaw.Kd = 0.0f;
+    arm_pid_init_f32(&pid_yaw, 1); // 1 = reset state
+
+    // --- Pitch 轴 (俯仰) PID 参数 ---
+    // Pitch轴通常负载和惯量与Yaw不同，可能需要独立的PID参数
+    pid_pitch.Kp = 0.1f;
+    pid_pitch.Ki = 0.0f;
+    pid_pitch.Kd = 0.0f;
+    arm_pid_init_f32(&pid_pitch, 1); // 1 = reset state
+
+    printf("Gimbal PID controllers initialized.\n");
+#if GIMBAL_DRY_RUN_MODE == 1
+    printf("!!! WARNING: Gimbal is in DRY RUN mode. Motors will NOT move. !!!\n");
+#endif
+}
+
+void Gimbal_SetTrackingMode(bool enable) {
+    if (enable && !gimbal_tracking_mode) {
+        gimbal_tracking_mode = true;
+        printf(">>> Entering PID Tracking Mode <<<\n");
+        // 进入跟踪模式时，重置PID状态，防止旧的积分值影响
+        arm_pid_reset_f32(&pid_yaw);
+        arm_pid_reset_f32(&pid_pitch);
+    } else if (!enable && gimbal_tracking_mode) {
+        gimbal_tracking_mode = false;
+        // 退出跟踪模式时，立即停止电机
+        Emm_V5_Vel_Control(YAW_MOTOR_ADDR, 0, 0, 10, false);
+        HAL_Delay(10);
+        Emm_V5_Vel_Control(PITCH_MOTOR_ADDR, 0, 0, 10, false);
+        HAL_Delay(10);
+        LazerOFF;
+        printf("<<< Exiting PID Tracking Mode >>>\n");
+    }
+}
+
 /**
  * @brief 云台校准模式状态机处理函数
  */
 void Gimbal_CalibModeHandler(void)
 {
     static uint32_t calib_entry_time = 0;
-    KeyEventType_t evt = HAL_Key_GetEvent(GIMBAL_CALIB_KEY_NUM);
+    KeyEventType_t calib_key_evt = HAL_Key_GetEvent(GIMBAL_CALIB_KEY_NUM);
+    KeyEventType_t track_key_evt = HAL_Key_GetEvent(4); // 使用4号键控制跟踪
 
+    // --- 跟踪模式切换 ---
+    if (track_key_evt == KEY_EVENT_LONG_PRESS) {
+        Gimbal_SetTrackingMode(!gimbal_tracking_mode);
+    }
+
+    // 如果在跟踪模式下，则不响应校准按键
+    if (gimbal_tracking_mode) {
+        return;
+    }
+
+    // --- 校准模式处理 ---
     if (!gimbal_calib_mode) {
-        // --- 正常模式下的按键处理 ---
-        if (evt == KEY_EVENT_SINGLE_CLICK) {
+        if (calib_key_evt == KEY_EVENT_SINGLE_CLICK) {
             Gimbal_ReturnToZero();
-        }
-        else if (evt == KEY_EVENT_DOUBLE_CLICK) {
-            // [测试] 在双击时运行完整的测试序列
+        } else if (calib_key_evt == KEY_EVENT_DOUBLE_CLICK) {
             Gimbal_RectTest();
-            // Gimbal_CircleTest();
-            // Gimbal_VelocityCircleTest();
-            // Gimbal_VelocityLineTest(0, 0, 10000, 50000, 5.0f);
-        }
-        else if (evt == KEY_EVENT_LONG_PRESS) {
+        } else if (calib_key_evt == KEY_EVENT_LONG_PRESS) {
             Gimbal_EnterCalibMode();
             calib_entry_time = HAL_GetTick();
         }
     } else {
-        // --- 校准模式下的处理 ---
-        // 检查超时
         if (HAL_GetTick() - calib_entry_time >= GIMBAL_CALIB_TIMEOUT_MS) {
             printf("Calibration timeout.\n");
             Gimbal_ExitCalibMode();
             return;
         }
-
-        // 检查按键事件
-        if (evt == KEY_EVENT_SINGLE_CLICK) {
+        if (calib_key_evt == KEY_EVENT_SINGLE_CLICK) {
             Gimbal_SetCurrentAsZero();
-            // 设置零点后重置超时计时器，允许用户继续微调
             calib_entry_time = HAL_GetTick();
             printf("Timeout reset. You can continue adjusting or long-press to exit.\n");
-        } else if (evt == KEY_EVENT_LONG_PRESS) {
+        } else if (calib_key_evt == KEY_EVENT_LONG_PRESS) {
             Gimbal_ExitCalibMode();
         }
     }
 }
+
+void Gimbal_Tracking_Handler(void) {
+    // 如果不处于跟踪模式，则直接返回
+    if (!gimbal_tracking_mode) {
+        return;
+    }
+
+    static bool target_lost = false;
+    static uint32_t target_lost_time = 0;
+    static uint32_t last_lost_print = 0;
+
+    uint16_t target_x, target_y;
+    bool found = Vision_GetTarget(&target_x, &target_y);
+    uint32_t now = HAL_GetTick();
+
+    if (found) {
+        // --- 目标重新锁定 ---
+        target_lost = false;
+
+        // --- 1. 计算误差 ---
+        float32_t error_x = (float32_t)TARGET_X - (float32_t)target_x;
+        float32_t error_y = (float32_t)TARGET_Y - (float32_t)target_y;
+
+        // --- 2. PID计算 ---
+        float32_t yaw_output = arm_pid_f32(&pid_yaw, error_x);
+        float32_t pitch_output = arm_pid_f32(&pid_pitch, error_y);
+
+        uint8_t yaw_dir = (yaw_output > 0) ? Gimbal_Yaw_Left : Gimbal_Yaw_Right;
+        uint16_t yaw_rpm = (uint16_t)fabsf(yaw_output);
+
+        uint8_t pitch_dir = (pitch_output > 0) ? Gimbal_Pitch_Up : Gimbal_Pitch_Down;
+        uint16_t pitch_rpm = (uint16_t)fabsf(pitch_output);
+
+        // --- 3. 死区与限幅 ---
+        if (fabsf(error_x) <= TARGET_TOLERANCE) yaw_rpm = 0;
+        if (fabsf(error_y) <= TARGET_TOLERANCE) pitch_rpm = 0;
+
+        const uint16_t MAX_TRACKING_RPM = 100;
+        if (yaw_rpm > MAX_TRACKING_RPM) yaw_rpm = MAX_TRACKING_RPM;
+        if (pitch_rpm > MAX_TRACKING_RPM) pitch_rpm = MAX_TRACKING_RPM;
+
+#if GIMBAL_DRY_RUN_MODE == 1
+        // --- 干跑模式下打印信息 ---
+        printf("[DRY RUN] Err(x,y): %4.0f,%4.0f | RPM(y,p): %3u,%3u | Dir(y,p): %s,%s\n",
+               error_x, error_y,
+               yaw_rpm, pitch_rpm,
+               (yaw_dir == Gimbal_Yaw_Left ? "L" : "R"),
+               (pitch_dir == Gimbal_Pitch_Up ? "U" : "D"));
+#else
+        // --- 正常模式下发送电机指令 ---
+        Emm_V5_Vel_Control(YAW_MOTOR_ADDR, yaw_dir, yaw_rpm, 10, false);
+        HAL_Delay(10);
+        Emm_V5_Vel_Control(PITCH_MOTOR_ADDR, pitch_dir, pitch_rpm, 10, false);
+        HAL_Delay(10);
+#endif
+
+
+        // 激光控制
+        if (yaw_rpm == 0 && pitch_rpm == 0) {
+            LazerON;
+        } else {
+            LazerOFF;
+        }
+
+    } else {
+        // --- 目标丢失处理 ---
+        if (!target_lost) {
+            target_lost = true;
+            target_lost_time = now;
+        }
+
+        if (now - target_lost_time >= 500) {
+            // --- 丢失超过2秒，执行停止与复位 ---
+#if GIMBAL_DRY_RUN_MODE == 1
+            if (now - last_lost_print > 1000) {
+                printf("[DRY RUN] Target Lost > 2s. Motors would stop.\n");
+                last_lost_print = now;
+            }
+#else
+            Emm_V5_Vel_Control(YAW_MOTOR_ADDR, 0, 0, 10, false);
+            Emm_V5_Vel_Control(PITCH_MOTOR_ADDR, 0, 0, 10, false);
+            arm_pid_reset_f32(&pid_yaw);
+            arm_pid_reset_f32(&pid_pitch);
+#endif
+            LazerOFF;
+        } else {
+            // --- 丢失缓冲期内：继续上一次输出或等待 ---
+#if GIMBAL_DRY_RUN_MODE == 1
+            if (now - last_lost_print > 1000) {
+                printf("[DRY RUN] Target temporarily lost. Waiting %.1f sec before stop...\n",
+                       (2000 - (now - target_lost_time)) / 1000.0f);
+                last_lost_print = now;
+            }
+#endif
+            // 缓冲期间不变，保持上次速度/方向或悬停（此处不动）
+        }
+    }
+}
+
 
 /**
  * @brief 统一控制云台两个电机的使能状态
@@ -80,7 +234,10 @@ void Gimbal_CalibModeHandler(void)
 static void Gimbal_SetMotorsEnable(bool enable)
 {
     Emm_V5_En_Control(YAW_MOTOR_ADDR, enable, false);
+    HAL_Delay(10);
     Emm_V5_En_Control(PITCH_MOTOR_ADDR, enable, false);
+    HAL_Delay(10);
+
 }
 
 /**
@@ -116,8 +273,11 @@ static void Gimbal_SetCurrentAsZero(void)
 
     // 2. 发送设置零点指令
     Emm_V5_Reset_CurPos_To_Zero(YAW_MOTOR_ADDR);
+    HAL_Delay(10);
     Emm_V5_Origin_Set_O(YAW_MOTOR_ADDR, true); // 将当前位置设为可存储的硬件零点
+    HAL_Delay(10);
     Emm_V5_Reset_CurPos_To_Zero(PITCH_MOTOR_ADDR);
+    HAL_Delay(10);
     Emm_V5_Origin_Set_O(PITCH_MOTOR_ADDR, true);
 
     HAL_Delay(50); // 等待指令执行
@@ -134,10 +294,11 @@ static void Gimbal_ReturnToZero(void)
 {
     printf("Gimbal returning to zero position...\n");
     // 触发YAW和PITCH轴回零，模式0（就近），多机同步标志为true
-    Emm_V5_Origin_Trigger_Return(YAW_MOTOR_ADDR, 0, true);
-    Emm_V5_Origin_Trigger_Return(PITCH_MOTOR_ADDR, 0, true);
+    Emm_V5_Origin_Trigger_Return(YAW_MOTOR_ADDR, 0, 0);\
+    HAL_Delay(10);
+    Emm_V5_Origin_Trigger_Return(PITCH_MOTOR_ADDR, 0, 0);
+    HAL_Delay(10);
     // 广播地址0，触发所有设置了同步标志的电机同时运动
-    Emm_V5_Synchronous_motion(0);
 }
 
 void Gimbal_MoveToAbsolute(int32_t yaw_pos, int32_t pitch_pos, uint16_t speed)
@@ -414,8 +575,7 @@ static void Gimbal_VelocityLineTest(int32_t start_yaw, int32_t start_pitch, int3
     uint16_t pitch_rpm = (uint16_t)(abs_pitch * steps_to_rpm);
 
     // 先切换为速度模式并使能
-    Emm_V5_Modify_Ctrl_Mode(YAW_MOTOR_ADDR, false, 2);
-    Emm_V5_Modify_Ctrl_Mode(PITCH_MOTOR_ADDR, false, 2);
+
     Emm_V5_En_Control(YAW_MOTOR_ADDR, true, false);
     Emm_V5_En_Control(PITCH_MOTOR_ADDR, true, false);
     HAL_Delay(100);
@@ -443,3 +603,84 @@ static void Gimbal_VelocityLineTest(int32_t start_yaw, int32_t start_pitch, int3
 
     printf("--- VELOCITY LINE TEST END ---\n");
 }
+
+
+void Gimbal_LimitProtect(void)
+{
+    if (g_pitch_angle < PITCH_MIN_ANGLE || g_pitch_angle > PITCH_MAX_ANGLE) {
+        Emm_V5_En_Control(PITCH_MOTOR_ADDR,0,0);
+    }
+    if (g_yaw_angle < YAW_MIN_ANGLE || g_yaw_angle > YAW_MAX_ANGLE) {
+        Emm_V5_En_Control(YAW_MOTOR_ADDR,0,0);
+    }
+}
+
+#define SWEEP_ANGLE_STEPS   (1067)  // 120度对应的步数
+#define SWEEP_SPEED_RPM     (100)
+#define SWEEP_TIMEOUT_MS    (2000)  // 扫描等待时间
+
+typedef enum {
+    GIMBAL_STATE_IDLE,
+    GIMBAL_STATE_SWEEPING_LEFT,
+    GIMBAL_STATE_SWEEPING_RIGHT,
+    GIMBAL_STATE_RETURNING,
+} GimbalScanState_t;
+
+static GimbalScanState_t gimbal_scan_state = GIMBAL_STATE_IDLE;
+static int32_t gimbal_scan_origin = 0;
+static uint32_t gimbal_scan_start_time = 0;
+
+void Gimbal_SweepAndTrack_Handler(void)
+{
+    static KeyEventType_t key2_evt, key3_evt;
+    static bool sweeping = false;
+
+    key2_evt = HAL_Key_GetEvent(2);
+    key3_evt = HAL_Key_GetEvent(3);
+
+    if (gimbal_tracking_mode) return;  // 正在跟踪时不处理扫描
+
+    switch (gimbal_scan_state)
+    {
+        case GIMBAL_STATE_IDLE:
+            if (key2_evt == KEY_EVENT_DOUBLE_CLICK) {
+                gimbal_scan_origin = 0;
+                Gimbal_MoveToAbsolute(-SWEEP_ANGLE_STEPS, 0, SWEEP_SPEED_RPM);
+                gimbal_scan_state = GIMBAL_STATE_SWEEPING_LEFT;
+                gimbal_scan_start_time = HAL_GetTick();
+                printf("Scanning left...\n");
+            } else if (key3_evt == KEY_EVENT_DOUBLE_CLICK) {
+                gimbal_scan_origin = 0;
+                Gimbal_MoveToAbsolute(SWEEP_ANGLE_STEPS, 0, SWEEP_SPEED_RPM);
+                gimbal_scan_state = GIMBAL_STATE_SWEEPING_RIGHT;
+                gimbal_scan_start_time = HAL_GetTick();
+                printf("Scanning right...\n");
+            }
+            break;
+
+        case GIMBAL_STATE_SWEEPING_LEFT:
+        case GIMBAL_STATE_SWEEPING_RIGHT: {
+            uint16_t x, y;
+            if (Vision_GetTarget(&x, &y)) {
+                Gimbal_SetTrackingMode(true);
+                gimbal_scan_state = GIMBAL_STATE_IDLE;
+                printf("Target found, entering tracking mode.\n");
+            } else if (HAL_GetTick() - gimbal_scan_start_time >= SWEEP_TIMEOUT_MS) {
+                printf("No target found, returning to origin...\n");
+                Gimbal_MoveToAbsolute(gimbal_scan_origin, 0, SWEEP_SPEED_RPM);
+                gimbal_scan_state = GIMBAL_STATE_RETURNING;
+                gimbal_scan_start_time = HAL_GetTick();
+            }
+            break;
+        }
+
+        case GIMBAL_STATE_RETURNING:
+            // 简化处理：等待足够时间，进入空闲
+            if (HAL_GetTick() - gimbal_scan_start_time >= 1500) {
+                gimbal_scan_state = GIMBAL_STATE_IDLE;
+                printf("Returned to origin.\n");
+            }
+            break;
+    }
+}
+

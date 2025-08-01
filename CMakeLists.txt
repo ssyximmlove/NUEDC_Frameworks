@@ -46,8 +46,6 @@ add_executable(${CMAKE_PROJECT_NAME}
         Core/Inc/vision_uart.h
         Core/Src/stepper_uart.c
         Core/Inc/stepper_uart.h
-        Core/Src/pid.c
-        Core/Src/pid.h
 )
 
 add_library(cmsis_dsp STATIC IMPORTED)
@@ -110,7 +108,7 @@ target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
 # 启用FPU浮点运算库
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
         -mfloat-abi=hard
-        -mfpu=vfpv4-d16
+        -mfpu=fpv4-sp-d16
 
 )
 
