@@ -134,8 +134,13 @@ int main(void)
   Gimbal_PID_Init();
 
   printf("Board Peripherals Initialized\n");
-  printf("System Ready. Entering main loop...\n\n");
+  printf("System Ready. Entering main loop...\n");
 
+  HAL_OLED_Clear();
+  HAL_OLED_SetFont(u8g2_font_ncenB08_tr);
+  HAL_OLED_DrawString(0,0,"Init Finished");
+  HAL_OLED_SendBuffer();
+  HAL_Delay(100);
   // HAL_OLED_Test();
   // Emm_V5_Test();
   // HAL_GPIO_WritePin(Laser_GPIO_Port,Laser_Pin,1);
@@ -153,6 +158,7 @@ int main(void)
 
     Gimbal_CalibModeHandler();
 
+    Gimbal_SweepAndTrack_Handler();
 
     if (gimbal_tracking_mode) {
       Vision_ProcessData();

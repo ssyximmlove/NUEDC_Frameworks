@@ -79,6 +79,7 @@ void Gimbal_SetTrackingMode(bool enable) {
         Emm_V5_Vel_Control(PITCH_MOTOR_ADDR, 0, 0, 10, false);
         HAL_Delay(10);
         LazerOFF;
+        Gimbal_ReturnToZero();
         printf("<<< Exiting PID Tracking Mode >>>\n");
     }
 }
@@ -164,7 +165,7 @@ void Gimbal_Tracking_Handler(void) {
         if (fabsf(error_x) <= TARGET_TOLERANCE) yaw_rpm = 0;
         if (fabsf(error_y) <= TARGET_TOLERANCE) pitch_rpm = 0;
 
-        const uint16_t MAX_TRACKING_RPM = 100;
+        const uint16_t MAX_TRACKING_RPM = 1000;
         if (yaw_rpm > MAX_TRACKING_RPM) yaw_rpm = MAX_TRACKING_RPM;
         if (pitch_rpm > MAX_TRACKING_RPM) pitch_rpm = MAX_TRACKING_RPM;
 
@@ -303,7 +304,7 @@ static void Gimbal_ReturnToZero(void)
 
 void Gimbal_MoveToAbsolute(int32_t yaw_pos, int32_t pitch_pos, uint16_t speed)
 {
-    uint8_t acc = 50;
+    uint8_t acc = 5;
     printf("Moving to (YAW: %ld, PITCH: %ld)\n", yaw_pos, pitch_pos);
 
     // 正确处理方向和步数
@@ -314,8 +315,9 @@ void Gimbal_MoveToAbsolute(int32_t yaw_pos, int32_t pitch_pos, uint16_t speed)
 
     // 配置电机指令，使用绝对位置模式(raF=true)和同步启动模式(snF=true)
     Emm_V5_Pos_Control(YAW_MOTOR_ADDR, yaw_dir, speed, acc, yaw_steps, true, true);
+    HAL_Delay(10);
     Emm_V5_Pos_Control(PITCH_MOTOR_ADDR, pitch_dir, speed, acc, pitch_steps, true, true);
-
+    HAL_Delay(10);
     // 使用广播地址0触发所有同步标记的电机同时运动
     Emm_V5_Synchronous_motion(0);
 }
@@ -615,8 +617,8 @@ void Gimbal_LimitProtect(void)
     }
 }
 
-#define SWEEP_ANGLE_STEPS   (1067)  // 120度对应的步数
-#define SWEEP_SPEED_RPM     (100)
+#define SWEEP_ANGLE_STEPS   (3000)  // 120度对应的步数
+#define SWEEP_SPEED_RPM     (5)
 #define SWEEP_TIMEOUT_MS    (2000)  // 扫描等待时间
 
 typedef enum {
@@ -632,55 +634,20 @@ static uint32_t gimbal_scan_start_time = 0;
 
 void Gimbal_SweepAndTrack_Handler(void)
 {
-    static KeyEventType_t key2_evt, key3_evt;
-    static bool sweeping = false;
+    KeyEventType_t key2_evt = HAL_Key_GetEvent(3);
+    KeyEventType_t key3_evt = HAL_Key_GetEvent(2);
 
-    key2_evt = HAL_Key_GetEvent(2);
-    key3_evt = HAL_Key_GetEvent(3);
+    if (gimbal_tracking_mode) return;
 
-    if (gimbal_tracking_mode) return;  // 正在跟踪时不处理扫描
-
-    switch (gimbal_scan_state)
-    {
-        case GIMBAL_STATE_IDLE:
-            if (key2_evt == KEY_EVENT_DOUBLE_CLICK) {
-                gimbal_scan_origin = 0;
-                Gimbal_MoveToAbsolute(-SWEEP_ANGLE_STEPS, 0, SWEEP_SPEED_RPM);
-                gimbal_scan_state = GIMBAL_STATE_SWEEPING_LEFT;
-                gimbal_scan_start_time = HAL_GetTick();
-                printf("Scanning left...\n");
-            } else if (key3_evt == KEY_EVENT_DOUBLE_CLICK) {
-                gimbal_scan_origin = 0;
-                Gimbal_MoveToAbsolute(SWEEP_ANGLE_STEPS, 0, SWEEP_SPEED_RPM);
-                gimbal_scan_state = GIMBAL_STATE_SWEEPING_RIGHT;
-                gimbal_scan_start_time = HAL_GetTick();
-                printf("Scanning right...\n");
-            }
-            break;
-
-        case GIMBAL_STATE_SWEEPING_LEFT:
-        case GIMBAL_STATE_SWEEPING_RIGHT: {
-            uint16_t x, y;
-            if (Vision_GetTarget(&x, &y)) {
-                Gimbal_SetTrackingMode(true);
-                gimbal_scan_state = GIMBAL_STATE_IDLE;
-                printf("Target found, entering tracking mode.\n");
-            } else if (HAL_GetTick() - gimbal_scan_start_time >= SWEEP_TIMEOUT_MS) {
-                printf("No target found, returning to origin...\n");
-                Gimbal_MoveToAbsolute(gimbal_scan_origin, 0, SWEEP_SPEED_RPM);
-                gimbal_scan_state = GIMBAL_STATE_RETURNING;
-                gimbal_scan_start_time = HAL_GetTick();
-            }
-            break;
-        }
-
-        case GIMBAL_STATE_RETURNING:
-            // 简化处理：等待足够时间，进入空闲
-            if (HAL_GetTick() - gimbal_scan_start_time >= 1500) {
-                gimbal_scan_state = GIMBAL_STATE_IDLE;
-                printf("Returned to origin.\n");
-            }
-            break;
+    if (key2_evt == KEY_EVENT_DOUBLE_CLICK) {
+        printf(">>> Double click on KEY2: sweeping LEFT and entering tracking\n");
+        Gimbal_MoveToAbsolute(-SWEEP_ANGLE_STEPS, 0, SWEEP_SPEED_RPM);
+        Gimbal_SetTrackingMode(true);
+    }
+    else if (key3_evt == KEY_EVENT_DOUBLE_CLICK) {
+        printf(">>> Double click on KEY3: sweeping RIGHT and entering tracking\n");
+        Gimbal_MoveToAbsolute(SWEEP_ANGLE_STEPS, 0, SWEEP_SPEED_RPM);
+        Gimbal_SetTrackingMode(true);
     }
 }
 
